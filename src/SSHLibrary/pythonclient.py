@@ -50,6 +50,7 @@ paramiko.transport.Transport._orig_start_client = \
     paramiko.transport.Transport.start_client
 paramiko.transport.Transport.start_client = _custom_start_client
 
+
 # See http://code.google.com/p/robotframework-sshlibrary/issues/detail?id=55
 def _custom_log(self, level, msg, *args):
     escape = lambda s: s.replace('%', '%%')
@@ -59,8 +60,10 @@ def _custom_log(self, level, msg, *args):
         msg = escape(msg)
     return self._orig_log(level, msg, *args)
 
+
 paramiko.sftp_client.SFTPClient._orig_log = paramiko.sftp_client.SFTPClient._log
 paramiko.sftp_client.SFTPClient._log = _custom_log
+
 
 class PythonSSHClient(AbstractSSHClient):
     tunnel = None
@@ -95,18 +98,20 @@ class PythonSSHClient(AbstractSSHClient):
                                     password, look_for_keys=look_for_keys,
                                     allow_agent=look_for_keys,
                                     timeout=float(self.config.timeout), sock=proxy_cmd)
-            except paramiko.AuthenticationException:
+            except paramiko.AuthenticationException as connect_exception:
                 try:
                     transport = self.client.get_transport()
                     try:
                         transport.auth_none(username)
                     except:
                         pass
-                    transport.auth_password(username,password)
-                except:
-                    raise SSHClientException
-        except paramiko.AuthenticationException:
-            raise SSHClientException
+                    transport.auth_password(username, password)
+                except Exception as user_pass_auth_exception:
+                    raise SSHClientException(
+                        'User/password authentication failed\nCauses: {}\n{}'.format(connect_exception,
+                                                                                     user_pass_auth_exception))
+        except paramiko.AuthenticationException as auth_exception:
+            raise SSHClientException('Login failed\nCause: {}'.format(auth_exception))
 
     def _login_with_public_key(self, username, key_file, password, allow_agent, look_for_keys, proxy_cmd=None):
         self.config.host = self._read_ssh_config_host(self.config.host)
@@ -119,16 +124,17 @@ class PythonSSHClient(AbstractSSHClient):
                                 look_for_keys=look_for_keys,
                                 timeout=float(self.config.timeout),
                                 sock=proxy_cmd)
-        except paramiko.AuthenticationException:
+        except paramiko.AuthenticationException as auth_exception:
             try:
                 transport = self.client.get_transport()
                 try:
                     transport.auth_none(username)
                 except:
                     pass
-                transport.auth_publickey(username,None)
+                transport.auth_publickey(username, None)
             except Exception as err:
-                raise SSHClientException
+                raise SSHClientException(
+                    'Unable to perform fallback login with user/pass\nCauses: {}\n{}'.format(err, auth_exception))
 
     def get_banner(self):
         return self.client.get_transport().get_banner()
@@ -144,7 +150,7 @@ class PythonSSHClient(AbstractSSHClient):
         except Exception:
             raise SSHClientException('Unable to connect to port {} on {}'.format(port, host))
 
-    def _start_command(self, command, sudo=False,  sudo_password=None, invoke_subsystem=False, forward_agent=False):
+    def _start_command(self, command, sudo=False, sudo_password=None, invoke_subsystem=False, forward_agent=False):
         cmd = RemoteCommand(command, self.config.encoding)
         transport = self.client.get_transport()
         if not transport:
@@ -153,7 +159,7 @@ class PythonSSHClient(AbstractSSHClient):
 
         if forward_agent:
             paramiko.agent.AgentRequestHandler(new_shell)
-            
+
         cmd.run_in(new_shell, sudo, sudo_password, invoke_subsystem)
         return cmd
 
@@ -201,9 +207,9 @@ class Shell(AbstractShell):
         return data
 
     def read_byte(self):
-         if self._output_available():
+        if self._output_available():
             return self._shell.recv(1)
-         return b''
+        return b''
 
     def resize(self, width, height):
         self._shell.resize_pty(width=width, height=height)
@@ -319,7 +325,7 @@ class RemoteCommand(AbstractCommand):
         stderrs = []
         while self._shell_open():
             self._flush_stdout_and_stderr(stderr_filebuffer, stderrs, stdout_filebuffer, stdouts, timeout)
-            time.sleep(0.01) # lets not be so busy
+            time.sleep(0.01)  # lets not be so busy
         stdout = (b''.join(stdouts) + stdout_filebuffer.read()).decode(self._encoding)
         stderr = (b''.join(stderrs) + stderr_filebuffer.read()).decode(self._encoding)
         return stderr, stdout
@@ -328,7 +334,7 @@ class RemoteCommand(AbstractCommand):
         if timeout:
             self._shell.status_event.wait(timeout)
             if not self._shell.status_event.isSet():
-                raise SSHClientException('Timed out in %s seconds' % int(timeout))
+                raise SSHClientException('Timed out in {} seconds'.format(int(timeout)))
 
         if self._shell.recv_ready():
             stdouts.append(stdout_filebuffer.read(len(self._shell.in_buffer)))
@@ -337,9 +343,9 @@ class RemoteCommand(AbstractCommand):
 
     def _shell_open(self):
         return not (self._shell.closed or
-                self._shell.eof_received or
-                self._shell.eof_sent or
-                not self._shell.active)
+                    self._shell.eof_received or
+                    self._shell.eof_sent or
+                    not self._shell.active)
 
     def _execute(self):
         self._shell.exec_command(self._command)

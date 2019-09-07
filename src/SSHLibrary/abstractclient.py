@@ -29,6 +29,7 @@ from .utils import is_bytes, is_string, unicode
 
 
 class SSHClientException(RuntimeError):
+    """ SSH Client specific run-time error. """
     pass
 
 
@@ -194,8 +195,7 @@ class AbstractSSHClient(object):
             self._login(username, password, allow_agent, look_for_keys, proxy_cmd)
         except SSHClientException:
             self.client.close()
-            raise SSHClientException("Authentication failed for user '%s'."
-                                     % self._decode(username))
+            raise SSHClientException("Authentication failed for user '{}'.".format(self._decode(username)))
         return self._read_login_output(delay)
 
     def _encode(self, text):
@@ -257,20 +257,19 @@ class AbstractSSHClient(object):
             self._login_with_public_key(username, keyfile, password,
                                         allow_agent, look_for_keys,
                                         proxy_cmd)
-        except SSHClientException:
+        except SSHClientException as client_exception:
             self.client.close()
             raise SSHClientException("Login with public key failed for user "
-                                     "'%s'." % self._decode(username))
+                                     "'{}'\nCause: '{}'.".format(self._decode(username), client_exception))
         return self._read_login_output(delay)
 
     def _verify_key_file(self, keyfile):
         if not os.path.exists(keyfile):
-            raise SSHClientException("Given key file '%s' does not exist." %
-                                     keyfile)
+            raise SSHClientException("Given key file '{}' does not exist.".format(keyfile))
         try:
             open(keyfile).close()
-        except IOError:
-            raise SSHClientException("Could not read key file '%s'." % keyfile)
+        except IOError as io_error:
+            raise SSHClientException("Could not read key file '{}'\nCause: {}.".format(keyfile, io_error))
 
     def _login_with_public_key(self, username, keyfile, password,
                                allow_agent, look_for_keys, proxy_cmd):
@@ -442,8 +441,7 @@ class AbstractSSHClient(object):
             output += self.read_char()
             if matcher(output):
                 return output
-        raise SSHClientException("No match found for '%s' in %s\nOutput:\n%s."
-                                 % (expected, timeout, output))
+        raise SSHClientException("No match found for '{}' in {}\nOutput:\n{}.".format(expected, timeout, output))
 
     def read_until_newline(self):
         """Reads output from the current shell until a newline character is
@@ -542,8 +540,7 @@ class AbstractSSHClient(object):
             if matcher(prefix + self._encode(ret)):
                 return ret
         raise SSHClientException(
-            "No match found for '%s' in %s\nOutput:\n%s"
-            % (expected, timeout, ret))
+            "No match found for '{}' in {}\nOutput:\n{}".format(expected, timeout, ret))
 
     def write_until_expected(self, text, expected, timeout, interval):
         """Writes `text` repeatedly in the current shell until the `expected`
@@ -578,8 +575,7 @@ class AbstractSSHClient(object):
                                         timeout=interval.value)
             except SSHClientException:
                 pass
-        raise SSHClientException("No match found for '%s' in %s."
-                                 % (self._decode(expected), timeout))
+        raise SSHClientException("No match found for '{}' in {}.".format(self._decode(expected), timeout))
 
     def put_file(self, source, destination='.', mode='0o744', newline='',
                  scp='OFF'):
@@ -808,8 +804,7 @@ class AbstractSFTPClient(object):
 
     def _verify_remote_dir_exists(self, path):
         if not self.is_dir(path):
-            raise SSHClientException("There was no directory matching '%s'." %
-                                     path)
+            raise SSHClientException("There was no directory matching '{}'.".format(path))
 
     def _get_item_names(self, path):
         return [item.name for item in self._list(path)]
@@ -975,7 +970,7 @@ class AbstractSFTPClient(object):
         """
         remote_files = self._get_get_file_sources(source, path_separator)
         if not remote_files:
-            msg = "There were no source files matching '%s'." % source
+            msg = "There were no source files matching '{}'.".format(source)
             raise SSHClientException(msg)
         local_files = self._get_get_file_destinations(remote_files, destination)
         files = list(zip(remote_files, local_files))
@@ -1076,8 +1071,7 @@ class AbstractSFTPClient(object):
 
     def _verify_local_dir_exists(self, path):
         if not os.path.isdir(path):
-            raise SSHClientException("There was no source path matching '%s'."
-                                     % path)
+            raise SSHClientException("There was no source path matching '{}'.".format(path))
 
     def put_file(self, sources, destination, mode, newline, path_separator='/'):
         """Uploads the file(s) from the local machine to the remote host.
@@ -1128,7 +1122,7 @@ class AbstractSFTPClient(object):
         else:
             sources = [f for f in [source]]
         if not sources:
-            msg = "There are no source files matching '%s'." % source
+            msg = "There are no source files matching '{}'.".format(source)
             raise SSHClientException(msg)
         return sources
 

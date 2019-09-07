@@ -46,7 +46,7 @@ def _wait_until_timeout(_shell, timeout):
     condition = _shell.waitForCondition(rc , int(timeout) * 1000)
 
     if condition & timeout_condition != 0:
-        raise SSHClientException("Timed out in %s seconds" % int(timeout))
+        raise SSHClientException("Timed out in {} seconds".format(int(timeout)))
 
 class JavaSSHClient(AbstractSSHClient):
 
